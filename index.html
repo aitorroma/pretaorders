@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrestaShop - Gestión de Pedidos</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Flowbite -->
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.1/dist/flowbite.min.css" rel="stylesheet" />
+    
+    <!-- SheetJS para leer Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- JsBarcode para generar códigos de barras -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    
+    <!-- Fuentes personalizadas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        presta: {
+                            blue: '#25B9D7',
+                            'dark-blue': '#1D8CA8',
+                            navy: '#363A41',
+                            'light-gray': '#F1F3F4',
+                            'medium-gray': '#6C868E',
+                            success: '#72C02C',
+                            warning: '#F39C12',
+                            danger: '#E74C3C'
+                        }
+                    },
+                    fontFamily: {
+                        'sans': ['Open Sans', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Open Sans', sans-serif;
+        }
+        
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            @page {
+                size: A4 portrait;
+                margin: 0.3cm 0.3cm;
+            }
+            
+            .print-page-break {
+                page-break-after: always;
+                page-break-inside: avoid;
+            }
+            
+            .print-card {
+                border: none !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                padding: 0.5rem;
+                page-break-inside: avoid;
+                margin: 0;
+            }
+            
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+                font-size: 9px;
+                background: #ffffff !important;
+            }
+
+            /* Aprovechar todo el ancho en impresión */
+            .container, main.container {
+                max-width: 100% !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            
+            .checkbox-print {
+                border: 1px solid #0E1E1E;
+                width: 14px;
+                height: 14px;
+                display: inline-block;
+                flex-shrink: 0;
+            }
+            
+            .print-header {
+                padding: 0.3rem !important;
+            }
+            
+            .print-client-info {
+                padding: 0.5rem !important;
+            }
+            
+            .print-products {
+                padding: 0.5rem !important;
+            }
+            
+            .print-product-item {
+                padding: 0.35rem !important;
+                margin-bottom: 0.2rem !important;
+            }
+            
+            .print-footer {
+                padding: 0.35rem !important;
+            }
+            /* Quitar separadores de secciones en impresión */
+            .print-client-info {
+                border: none !important;
+                background: transparent !important;
+            }
+            
+            .barcode-container {
+                background: white;
+                padding: 0.15rem;
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                display: inline-block;
+            }
+            
+            .barcode-container svg {
+                display: block;
+                max-width: 130px;
+                height: auto;
+            }
+
+            /* Lista de productos en una sola columna y cada item en una sola línea */
+            .print-products .space-y-1 {
+                display: block !important;
+            }
+            .print-products .space-y-1 > * {
+                margin: 0 0 4px 0 !important;
+            }
+            .print-product-item {
+                display: grid !important;
+                grid-template-columns: 16px 1fr auto auto;
+                align-items: center;
+                column-gap: 10px !important;
+                row-gap: 4px !important;
+                border: none !important;
+                background: transparent !important;
+                border-radius: 0 !important;
+                padding: 0.25rem !important;
+            }
+            .print-product-item .product-name {
+                font-size: 0.8rem !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+            .print-product-item .checkbox-print {
+                margin-right: 0 !important;
+            }
+
+            /* Agrupar cantidad y código de barras en línea */
+            .print-product-item .right-group {
+                display: flex !important;
+                align-items: center !important;
+                gap: 8px !important;
+            }
+            /* Ocultar etiquetas en impresión para ahorrar espacio */
+            .print-product-item .qty-label,
+            .print-product-item .ean-label {
+                display: none !important;
+            }
+
+            /* Reducir tamaños en encabezado y badges */
+            .print-header h3 {
+                font-size: 1rem !important;
+                line-height: 1.2 !important;
+            }
+            .print-header .rounded-full {
+                padding: 2px 8px !important;
+                font-size: 10px !important;
+            }
+            /* Reducir tipografía en datos de cliente */
+            .print-client-info .text-sm {
+                font-size: 0.8rem !important;
+            }
+            /* Reducir padding y tamaño del badge de cantidad */
+            .print-product-item span.inline-block {
+                padding: 2px 8px !important;
+                font-size: 0.95rem !important;
+            }
+        }
+        
+        .loader {
+            border: 3px solid #F1F3F4;
+            border-top: 3px solid #25B9D7;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .checkbox-print {
+            border: 2px solid #363A41;
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            flex-shrink: 0;
+            background: white;
+        }
+    </style>
+</head>
+<body class="bg-presta-light-gray">
+    <!-- Header -->
+    <header class="bg-presta-navy shadow-sm no-print">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"><path fill="#ffffff" d="M11.558 1.034C5.174 1.034 0 6.21 0 12.592c0 1.258.201 2.47.574 3.597l.002-.007a12.4 12.4 0 0 1 .53-1.787l.011-.03q.129-.333.277-.66l.084-.181q.12-.256.253-.507q.053-.102.108-.203c.02-.038.044-.073.064-.11q.14-.25.29-.493l.075-.114q.187-.292.393-.573l.035-.05q.217-.289.451-.563l.1-.118q.232-.266.481-.517l.099-.097a10 10 0 0 1 .546-.503c.74-2.48 3.005-4.285 5.686-4.285c1.079 0 2.152.31 3.071.873a6 6 0 0 1 2.211 2.407l.007.015l.04.074v.003l.004.002a10 10 0 0 1 1.567 1.198l.12.109c.002 0 .006.005.007.006l-.002-.006l-.001-.004v-.003l.042-.084c.377-2.384 1.43-4.102 2.67-4.102c.934 0 1.762.975 2.276 2.476l.005.016l.001.002q.218.236.424.521l.007.01l.021.067l-.02-.078c-1.542-4.569-5.863-7.857-10.952-7.857zM9.927 5.477C7.586 5.52 5.34 7.132 4.574 9.365l-.012.034a10 10 0 0 1 1.315-.895c2.806-1.656 6.479-1.646 9.278.016c-.895-1.653-2.631-2.819-4.5-3.004a5 5 0 0 0-.728-.039m9.834.5a1.4 1.4 0 0 0-.39.067c-1.265.562-1.719 2.073-2.031 3.303l-.016.072c.365-.62.808-1.215 1.396-1.642c.835-.687 2.105-.655 2.916.053c.308.326.141.008.031-.22c-.342-.75-1.025-1.653-1.906-1.634zM12.35 8.315l-1.07 3.27l-.002.005l-.006.002l-4.498 1.112h-.009l4.456 1.087q.159.166.36.28h.002q.063.035.129.065l.01.005q.062.026.126.047l.021.008q.06.019.12.032l.033.008a1.7 1.7 0 0 0 .318.033a1.55 1.55 0 0 0 1.43-.948c.08-.186.123-.39.123-.604v-.011l-.001-.012a2 2 0 0 0-.01-.16l-.001-.002a2 2 0 0 0-.026-.153l-.001-.004a1.5 1.5 0 0 0-.096-.288v-.003a1.5 1.5 0 0 0-.348-.49v-.003zm3.148.626c.048 1.008.036 2.046-.1 3.057c-.17 2.018-1.19 3.798-1.972 5.616l-.03.08l-.035.086c1.51-1.522 3.17-3.04 3.969-5.082c.383-.636.118-1.342-.115-1.976c-.17-.877-1.069-1.278-1.717-1.781m6.172.572l-.588 2.688a2 2 0 0 0-.047.2l-.01.06a2 2 0 0 0-.016.222l-.002.031h.003c0 .628.297 1.136.663 1.137a.4.4 0 0 0 .182-.045l.027-.015l.07-.047q.019-.016.036-.033a.8.8 0 0 0 .137-.168l.03-.054a1 1 0 0 0 .052-.108l.017-.04q.03-.08.053-.166l.002-.002l.001-.003l.404-.451l-.407-.456v.001l-.02-.063zm-4.381.856c.69 1.716.85 3.707.091 5.43c-.49 1.368-1.587 2.463-1.874 3.905q1.096.172 2.21.186c2.166.029 4.332-.42 6.284-1.365c-2.04-2.869-4.121-5.755-6.711-8.156m-4.948.977a.583.583 0 1 1 0 1.166a.583.583 0 0 1 0-1.166m9.352.37c.138 0 .249.19.249.426s-.111.426-.249.426c-.137 0-.248-.19-.248-.426c0-.235.11-.426.248-.426m-4.044.184a5 5 0 0 1-.05.29l-.006.023q-.016.076-.033.128c-.48 1.417-1.275 2.52-2.36 3.697q-.221.239-.459.484a59 59 0 0 1-1.196 1.205c-.112.11-.259.261-.425.436c-.103.287-.22.61-.318.95q-.065-.023-.131-.049c-2.108-.815-3.519-1.904-3.519-1.904s1.086 1.414 2.915 2.74q.265.192.522.339c-.075 1.194.452 2.34 2.83 2.682a4.8 4.8 0 0 0 1.228.008l-.01-.029l-.004-.01s-.167-.133-.379-.377a3.8 3.8 0 0 1-.584-.897a3.4 3.4 0 0 1-.266-.862a3.2 3.2 0 0 1-.006-.972q.025-.18.072-.366c.093-.374.255-.772.507-1.192l.002-.003l.241-.404c1.103-1.86 1.797-3.275 1.506-5.441a9 9 0 0 0-.078-.476zm4.681.779l.003.036v.01l-.003.038l.003-.043q0-.02-.003-.04zm-.012.275l-.002.01l-.002.014zm1.353 5.928c-2.553 1.138-5.44 1.44-8.192 1.007c-.14 1.108.384 2.218 1.214 2.93l.012.01c2.703-.433 4.975-2.168 6.966-3.946z"/></svg>
+                    <div>
+                        <h1 class="text-xl font-bold text-white">
+                            PrestaShop
+                        </h1>
+                        <p class="text-xs text-presta-blue">Gestión de Pedidos</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Upload Section -->
+        <div id="uploadSection" class="mb-8 no-print">
+            <div class="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-presta-blue">
+                <div class="text-center">
+                    <svg class="mx-auto h-12 w-12 text-presta-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <h3 class="mt-2 text-lg font-bold text-presta-navy">
+                        Cargar archivo Excel de pedidos
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-500">
+                        Formato: .xlsx con hojas "Pedidos eCommerce" y "Productos de Pedidos"
+                    </p>
+                    <div class="mt-4">
+                        <label for="fileInput" class="cursor-pointer inline-flex items-center px-6 py-3 bg-presta-blue text-white font-semibold rounded-lg hover:bg-presta-dark-blue transition-colors">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                            </svg>
+                            Seleccionar archivo
+                        </label>
+                        <input id="fileInput" type="file" accept=".xlsx" class="hidden" onchange="handleFileUpload(event)">
+                    </div>
+                    <p id="fileName" class="mt-2 text-sm text-gray-600"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loadingSection" class="hidden text-center py-12">
+            <div class="loader mx-auto"></div>
+            <p class="mt-4 text-presta-navy font-semibold">Procesando archivo...</p>
+        </div>
+
+        <!-- Main Content -->
+        <div id="mainContent" class="hidden">
+            <!-- Navigation Tabs -->
+            <div class="mb-6 no-print">
+                <div class="border-b border-gray-200">
+                    <nav class="-mb-px flex space-x-4" role="tablist">
+                        <button onclick="showTab('resumen')" 
+                                class="tab-button active border-b-2 border-presta-blue text-presta-blue px-4 py-2 font-semibold"
+                                data-tab="resumen">
+                            📊 Resumen por Pedido
+                        </button>
+                        <button onclick="showTab('pedidos')" 
+                                class="tab-button border-b-2 border-transparent text-gray-500 hover:text-presta-blue px-4 py-2 font-semibold"
+                                data-tab="pedidos">
+                            📋 Hojas de Trabajo
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- RESUMEN Tab -->
+            <div id="resumenTab" class="tab-content">
+                <!-- Filters -->
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6 no-print">
+                    <h3 class="text-lg font-bold text-presta-navy mb-4">🎯 Filtros</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-presta-navy mb-2">Cliente</label>
+                            <select id="clienteFilterResumen" onchange="filterResumen()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-presta-blue focus:border-transparent">
+                                <option value="">Todos los clientes</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-presta-navy mb-2">Dirección de Envío</label>
+                            <select id="direccionFilterResumen" onchange="filterResumen()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-presta-blue focus:border-transparent">
+                                <option value="">Todas las direcciones</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="printResumen()" class="w-full px-6 py-2 bg-presta-success text-white font-semibold rounded-lg hover:bg-green-600 transition-colors">
+                                🖨️ Imprimir Resumen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resumen Cards -->
+                <div id="resumenCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                    <!-- Cards will be inserted here -->
+                </div>
+
+                <!-- Resumen Table -->
+                <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold text-presta-navy mb-4">
+                            📦 Resumen de Pedidos
+                        </h3>
+                        <div id="resumenContent" class="overflow-x-auto">
+                            <!-- Table will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PEDIDOS Tab -->
+            <div id="pedidosTab" class="tab-content hidden">
+                <!-- Filters -->
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6 no-print">
+                    <h3 class="text-lg font-bold text-presta-navy mb-4">🎯 Filtros</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-presta-navy mb-2">Sede (NOMBRE_ENVIO)</label>
+                            <select id="sedeFilter" onchange="updateUsuarioFilter(); filterPedidos();" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-presta-blue focus:border-transparent">
+                                <option value="">Todas las sedes</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-presta-navy mb-2">Usuario (Cliente)</label>
+                            <select id="usuarioFilter" onchange="filterPedidos()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-presta-blue focus:border-transparent">
+                                <option value="">Todos los usuarios</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="printPedidos()" class="w-full px-6 py-2 bg-presta-success text-white font-semibold rounded-lg hover:bg-green-600 transition-colors">
+                                🖨️ Imprimir Selección
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between">
+                        <span id="pedidosCount" class="text-sm text-gray-600 font-semibold"></span>
+                        <div class="text-xs text-gray-500 italic">
+                            💡 Cada pedido se imprimirá en una hoja separada
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pedidos List -->
+                <div id="pedidosContent" class="space-y-4">
+                    <!-- Pedidos cards will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.1/dist/flowbite.min.js"></script>
+    
+    <script>
+        let allData = {
+            pedidos: [],
+            lineas: [],
+            sedes: [],
+            usuarios: [],
+            usuariosPorSede: {}
+        };
+        
+        let filteredData = [];
+
+        function formatCliente(pedido) {
+            const nombres = pedido.CLIENTE_NOMBRES || pedido.CLIENTE_NOMBRE || '';
+            const apellidos = pedido.CLIENTE_APELLIDOS || pedido.CLIENTE_APELLIDO || '';
+            return (apellidos || nombres)
+                ? `${apellidos}${apellidos && nombres ? ', ' : ''}${nombres}`
+                : '';
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileName').textContent = `Archivo: ${file.name}`;
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('loadingSection').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // Leer hojas
+                    const pedidosSheet = workbook.Sheets['Pedidos eCommerce'];
+                    const lineasSheet = workbook.Sheets['Productos de Pedidos'];
+
+                    if (!pedidosSheet || !lineasSheet) {
+                        alert('Error: El archivo debe contener las hojas "Pedidos eCommerce" y "Productos de Pedidos"');
+                        resetUpload();
+                        return;
+                    }
+
+                    allData.pedidos = XLSX.utils.sheet_to_json(pedidosSheet);
+                    allData.lineas = XLSX.utils.sheet_to_json(lineasSheet);
+
+                    processData();
+                    
+                    document.getElementById('loadingSection').classList.add('hidden');
+                    document.getElementById('mainContent').classList.remove('hidden');
+                } catch (error) {
+                    alert('Error al procesar el archivo: ' + error.message);
+                    resetUpload();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function resetUpload() {
+            document.getElementById('loadingSection').classList.add('hidden');
+            document.getElementById('uploadSection').classList.remove('hidden');
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileName').textContent = '';
+        }
+
+        function processData() {
+            // Extraer sedes únicas (NOMBRE_ENVIO)
+            allData.sedes = [...new Set(allData.pedidos.map(p => p.NOMBRE_ENVIO))].filter(s => s).sort();
+            
+            // Enriquecer pedidos con nombre formateado y extraer usuarios únicos (APELLIDOS, NOMBRES)
+            allData.pedidos = allData.pedidos.map(p => ({ ...p, CLIENTE_FORMATTED: formatCliente(p) }));
+            allData.usuarios = [...new Set(allData.pedidos.map(p => p.CLIENTE_FORMATTED))].filter(u => u).sort();
+            
+            // Crear mapeo de usuarios por sede
+            allData.usuariosPorSede = {};
+            allData.pedidos.forEach(pedido => {
+                const sede = pedido.NOMBRE_ENVIO;
+                const usuario = pedido.CLIENTE_FORMATTED;
+                
+                if (sede && usuario) {
+                    if (!allData.usuariosPorSede[sede]) {
+                        allData.usuariosPorSede[sede] = new Set();
+                    }
+                    allData.usuariosPorSede[sede].add(usuario);
+                }
+            });
+            
+            // Convertir Sets a Arrays ordenados
+            Object.keys(allData.usuariosPorSede).forEach(sede => {
+                allData.usuariosPorSede[sede] = [...allData.usuariosPorSede[sede]].sort();
+            });
+
+            // Poblar filtros
+            populateFilters();
+
+            // Generar contenido inicial
+            generateResumen();
+            generatePedidos();
+        }
+
+        function populateFilters() {
+            const sedeSelect = document.getElementById('sedeFilter');
+            const usuarioSelect = document.getElementById('usuarioFilter');
+            const clienteFilterResumen = document.getElementById('clienteFilterResumen');
+            const direccionFilterResumen = document.getElementById('direccionFilterResumen');
+
+            // Poblar sedes (para tab Hojas de Trabajo)
+            sedeSelect.innerHTML = '<option value="">Todas las sedes</option>';
+            allData.sedes.forEach(sede => {
+                sedeSelect.innerHTML += `<option value="${sede}">${sede}</option>`;
+            });
+
+            // Poblar usuarios (para tab Hojas de Trabajo)
+            usuarioSelect.innerHTML = '<option value="">Todos los usuarios</option>';
+            allData.usuarios.forEach(usuario => {
+                usuarioSelect.innerHTML += `<option value="${usuario}">${usuario}</option>`;
+            });
+
+            // Poblar clientes (para tab Resumen)
+            clienteFilterResumen.innerHTML = '<option value="">Todos los clientes</option>';
+            allData.usuarios.forEach(usuario => {
+                clienteFilterResumen.innerHTML += `<option value="${usuario}">${usuario}</option>`;
+            });
+
+            // Poblar direcciones únicas (para tab Resumen)
+            const direccionesUnicas = [...new Set(allData.pedidos.map(p => p.NOMBRE_ENVIO))].filter(d => d).sort();
+            direccionFilterResumen.innerHTML = '<option value="">Todas las direcciones</option>';
+            direccionesUnicas.forEach(dir => {
+                direccionFilterResumen.innerHTML += `<option value="${dir}">${dir}</option>`;
+            });
+        }
+
+        function updateUsuarioFilter() {
+            const sedeFilter = document.getElementById('sedeFilter').value;
+            const usuarioSelect = document.getElementById('usuarioFilter');
+            
+            // Guardar la selección actual
+            const currentSelection = usuarioSelect.value;
+            
+            // Limpiar select
+            usuarioSelect.innerHTML = '<option value="">Todos los usuarios</option>';
+            
+            if (sedeFilter) {
+                // Mostrar solo usuarios de la sede seleccionada
+                const usuariosSede = allData.usuariosPorSede[sedeFilter] || [];
+                usuariosSede.forEach(usuario => {
+                    const selected = usuario === currentSelection ? 'selected' : '';
+                    usuarioSelect.innerHTML += `<option value="${usuario}" ${selected}>${usuario}</option>`;
+                });
+            } else {
+                // Mostrar todos los usuarios
+                allData.usuarios.forEach(usuario => {
+                    const selected = usuario === currentSelection ? 'selected' : '';
+                    usuarioSelect.innerHTML += `<option value="${usuario}" ${selected}>${usuario}</option>`;
+                });
+            }
+        }
+
+        function generateResumen() {
+            const clienteFilter = document.getElementById('clienteFilterResumen').value;
+            const direccionFilter = document.getElementById('direccionFilterResumen').value;
+            
+            let pedidosFiltrados = allData.pedidos;
+            
+            // Filtrar por cliente
+            if (clienteFilter) {
+                pedidosFiltrados = pedidosFiltrados.filter(p => p.CLIENTE_FORMATTED === clienteFilter);
+            }
+            
+            // Filtrar por dirección
+            if (direccionFilter) {
+                pedidosFiltrados = pedidosFiltrados.filter(p => p.NOMBRE_ENVIO === direccionFilter);
+            }
+
+            // Ordenar por apellido
+            pedidosFiltrados.sort((a, b) => (a.CLIENTE_FORMATTED || '').localeCompare(b.CLIENTE_FORMATTED || '', 'es', { sensitivity: 'base' }));
+
+            // Generar cards de resumen (totales)
+            generateResumenCards(pedidosFiltrados);
+
+            // Generar tabla de pedidos individuales
+            generateResumenTable(pedidosFiltrados);
+        }
+
+        function generateResumenCards(pedidos) {
+            const cardsContainer = document.getElementById('resumenCards');
+            
+            // Calcular totales
+            const totalPedidos = pedidos.length;
+            let totalProductos = 0;
+            let totalUnidades = 0;
+            
+            pedidos.forEach(pedido => {
+                const lineas = allData.lineas.filter(l => l['CODIGO PEDIDO'] === pedido['CODIGO PEDIDO']);
+                totalProductos += lineas.length;
+                totalUnidades += lineas.reduce((sum, l) => sum + (l['CANTIDAD REQUERIDA'] || 0), 0);
+            });
+
+            const html = `
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-presta-blue">
+                    <h4 class="font-bold text-presta-navy text-lg mb-3">📊 Totales</h4>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600 text-sm">Pedidos:</span>
+                            <span class="text-2xl font-bold text-presta-blue">${totalPedidos}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600 text-sm">Productos:</span>
+                            <span class="text-2xl font-bold text-presta-success">${totalProductos}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600 text-sm">Unidades:</span>
+                            <span class="text-2xl font-bold text-presta-warning">${totalUnidades}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            cardsContainer.innerHTML = html;
+        }
+
+        function generateResumenTable(pedidos) {
+            const container = document.getElementById('resumenContent');
+            let html = '';
+
+            if (pedidos.length === 0) {
+                html = '<p class="text-center text-gray-500 py-8">No hay pedidos para mostrar</p>';
+            } else {
+                html = `
+                    <table class="w-full text-left">
+                        <thead class="bg-presta-navy text-white text-sm">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold">CÓDIGO PEDIDO</th>
+                                <th class="px-4 py-3 font-semibold">CLIENTE</th>
+                                <th class="px-4 py-3 font-semibold">DIRECCIÓN</th>
+                                <th class="px-4 py-3 font-semibold text-center">PRODUCTOS</th>
+                                <th class="px-4 py-3 font-semibold text-center">UNIDADES</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm">
+                `;
+
+                pedidos.forEach((pedido, idx) => {
+                    const lineas = allData.lineas.filter(l => l['CODIGO PEDIDO'] === pedido['CODIGO PEDIDO']);
+                    const totalUnidades = lineas.reduce((sum, l) => sum + (l['CANTIDAD REQUERIDA'] || 0), 0);
+                    const bgColor = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                    
+                    html += `
+                        <tr class="${bgColor} hover:bg-presta-light-gray">
+                            <td class="px-4 py-3">
+                                <span class="font-bold text-presta-blue">${pedido['CODIGO PEDIDO']}</span>
+                            </td>
+                            <td class="px-4 py-3 font-medium">${pedido.CLIENTE_FORMATTED || '-'}</td>
+                            <td class="px-4 py-3 text-xs text-gray-600">
+                                ${pedido.DIRECCION_ENVIO || '-'}<br>
+                                ${pedido.DIRECCION_CODIGO_POSTAL || ''} ${pedido.DIRECCION_CIUDAD || ''}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="inline-block bg-presta-success text-white px-3 py-1 rounded-full font-bold">
+                                    ${lineas.length}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="inline-block bg-presta-warning text-white px-3 py-1 rounded-full font-bold">
+                                    ${totalUnidades}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                        </tbody>
+                    </table>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function generatePedidos() {
+            filterPedidos();
+        }
+
+        function filterPedidos() {
+            const sedeFilter = document.getElementById('sedeFilter').value;
+            const usuarioFilter = document.getElementById('usuarioFilter').value;
+
+            filteredData = allData.pedidos.filter(pedido => {
+                let match = true;
+                if (sedeFilter && pedido.NOMBRE_ENVIO !== sedeFilter) match = false;
+                if (usuarioFilter && pedido.CLIENTE_FORMATTED !== usuarioFilter) match = false;
+                return match;
+            });
+
+            // Ordenar alfabéticamente por apellido (CLIENTE_FORMATTED)
+            filteredData.sort((a, b) => (a.CLIENTE_FORMATTED || '').localeCompare(b.CLIENTE_FORMATTED || '', 'es', { sensitivity: 'base' }));
+
+            const totalProductos = filteredData.reduce((sum, pedido) => {
+                const lineas = allData.lineas.filter(l => l['CODIGO PEDIDO'] === pedido['CODIGO PEDIDO']);
+                return sum + lineas.length;
+            }, 0);
+
+            document.getElementById('pedidosCount').textContent = 
+                `Mostrando ${filteredData.length} pedido(s) con ${totalProductos} producto(s)`;
+
+            displayPedidos();
+        }
+
+        function filterResumen() {
+            generateResumen();
+        }
+
+        function displayPedidos() {
+            const container = document.getElementById('pedidosContent');
+            let html = '';
+
+            filteredData.forEach((pedido, index) => {
+                const lineasPedido = allData.lineas.filter(l => 
+                    l['CODIGO PEDIDO'] === pedido['CODIGO PEDIDO']
+                );
+
+                const tipoEnvio = pedido.IS_CENTROTRABAJO ? 
+                    `🏢 Centro de Trabajo: ${pedido.NOMBRE_ENVIO}` : 
+                    `🏠 Envío a Domicilio`;
+
+                // Formato requerido: CLIENTE_APELLIDOS, CLIENTE_NOMBRES (con retrocompatibilidad)
+                const clienteNombres = pedido.CLIENTE_NOMBRES || pedido.CLIENTE_NOMBRE || '';
+                const clienteApellidos = pedido.CLIENTE_APELLIDOS || pedido.CLIENTE_APELLIDO || '';
+                const clienteNombreFormateado = (clienteApellidos || clienteNombres)
+                    ? `${clienteApellidos}${clienteApellidos && clienteNombres ? ', ' : ''}${clienteNombres}`
+                    : '-';
+
+                html += `
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden print-card print-page-break">
+                        <!-- Header -->
+                        <div class="bg-presta-blue print-header p-4">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-white font-bold text-xl mb-1">
+                                        PEDIDO: ${pedido['CODIGO PEDIDO']}
+                                    </h3>
+                                    <p class="text-white text-sm opacity-90">${tipoEnvio}</p>
+                                </div>
+                                <span class="bg-white text-presta-blue px-4 py-2 rounded-lg text-sm font-bold">
+                                    ${lineasPedido.length} productos
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Cliente Info -->
+                        <div class="print-client-info p-4 bg-presta-light-gray">
+                            <div class="grid grid-cols-3 gap-3">
+                                <div>
+                                    <p class="text-xs font-semibold text-presta-medium-gray uppercase mb-1">Cliente</p>
+                                    <p class="text-base font-bold text-presta-navy leading-tight">${clienteNombreFormateado}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-semibold text-presta-medium-gray uppercase mb-1">Teléfono</p>
+                                    <p class="text-base text-presta-navy font-semibold">${pedido.CLIENTE_TELEFONO || '-'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-semibold text-presta-medium-gray uppercase mb-1">CP / Ciudad</p>
+                                    <p class="text-base text-presta-navy font-semibold">${pedido.DIRECCION_CODIGO_POSTAL || '-'} / ${pedido.DIRECCION_CIUDAD || '-'}</p>
+                                </div>
+                                <div class="col-span-3">
+                                    <p class="text-xs font-semibold text-presta-medium-gray uppercase mb-1">Dirección de Envío</p>
+                                    <p class="text-base text-presta-navy font-semibold leading-tight">${pedido.DIRECCION_ENVIO || '-'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Productos -->
+                        <div class="print-products p-4">
+                            <h4 class="text-lg font-bold text-presta-navy mb-3 flex items-center pb-2 border-b-2 border-presta-blue">
+                                <svg class="w-5 h-5 mr-2 text-presta-blue" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"></path>
+                                </svg>
+                                PRODUCTOS A PREPARAR
+                            </h4>
+                            <div class="space-y-2">
+                `;
+
+                lineasPedido.forEach((linea, idx) => {
+                    const barcodeId = `barcode-${pedido['CODIGO PEDIDO']}-${idx}`;
+                    const hasBarcode = linea.BARCODE && linea.BARCODE.toString().length >= 8;
+                    
+                    html += `
+                        <div class="print-product-item flex items-center gap-3 p-3 rounded-lg border-2 border-gray-300 bg-white hover:border-presta-blue transition-colors">
+                            <div class="checkbox-print"></div>
+                            <div class="flex-1 min-w-0">
+                                <p class="product-name text-base text-presta-navy font-semibold leading-tight">${linea.PRODUCTO_NOMBRE || '-'}</p>
+                            </div>
+                            <div class="right-group flex items-center gap-3 flex-shrink-0">
+                                <div class="text-center">
+                                    <span class="qty-label text-xs font-semibold text-presta-medium-gray uppercase block mb-1">CANTIDAD</span>
+                                    <span class="inline-block bg-presta-blue text-white px-4 py-2 rounded-lg font-bold text-xl">
+                                        ${linea['CANTIDAD REQUERIDA'] || 0}
+                                    </span>
+                                </div>
+                                ${hasBarcode ? `
+                                <div class="text-center">
+                                    <span class="ean-label text-xs font-semibold text-presta-medium-gray uppercase block mb-1">EAN</span>
+                                    <div class="barcode-container bg-white p-2 rounded border border-gray-300">
+                                        <svg id="${barcodeId}" class="barcode-svg"></svg>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                            </div>
+                        </div>
+
+                        <!-- Footer -->
+                        <div class="print-footer bg-presta-light-gray p-3 border-t-2 border-presta-blue">
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm text-presta-navy font-semibold flex items-center">
+                                    <svg class="w-4 h-4 mr-2 text-presta-blue" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Marque los cuadros ☑ al recoger cada producto
+                                </p>
+                                <p class="text-xs text-presta-medium-gray font-semibold">Hoja ${index + 1} de ${filteredData.length}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (filteredData.length === 0) {
+                html = `
+                    <div class="bg-white rounded-lg shadow-md p-12 text-center">
+                        <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                        <h3 class="mt-4 text-lg font-semibold text-gray-900">No hay pedidos</h3>
+                        <p class="mt-2 text-sm text-gray-500">No se encontraron pedidos con los filtros seleccionados</p>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            
+            // Generar códigos de barras después de insertar el HTML
+            if (filteredData.length > 0) {
+                setTimeout(() => {
+                    filteredData.forEach((pedido, index) => {
+                        const lineasPedido = allData.lineas.filter(l => 
+                            l['CODIGO PEDIDO'] === pedido['CODIGO PEDIDO']
+                        );
+                        
+                        lineasPedido.forEach((linea, idx) => {
+                            const barcodeId = `barcode-${pedido['CODIGO PEDIDO']}-${idx}`;
+                            const barcodeElement = document.getElementById(barcodeId);
+                            
+                            if (barcodeElement && linea.BARCODE) {
+                                try {
+                                    const barcodeValue = linea.BARCODE.toString().trim();
+                                    
+                                    // Determinar el formato del código de barras
+                                    let format = 'CODE128';
+                                    if (barcodeValue.length === 13 && /^\d+$/.test(barcodeValue)) {
+                                        format = 'EAN13';
+                                    } else if (barcodeValue.length === 8 && /^\d+$/.test(barcodeValue)) {
+                                        format = 'EAN8';
+                                    } else if (barcodeValue.length === 12 && /^\d+$/.test(barcodeValue)) {
+                                        format = 'UPC';
+                                    }
+                                    
+                                    JsBarcode(barcodeElement, barcodeValue, {
+                                        format: format,
+                                        width: 1.2,
+                                        height: 26,
+                                        displayValue: false,
+                                        fontSize: 9,
+                                        margin: 1,
+                                        background: '#ffffff',
+                                        marginTop: 0,
+                                        marginBottom: 0
+                                    });
+                                } catch (error) {
+                                    console.error(`Error generando código de barras para ${barcodeId}:`, error);
+                                    // Si falla, mostrar el código como texto
+                                    barcodeElement.innerHTML = `<text class="text-xs font-mono">${linea.BARCODE}</text>`;
+                                }
+                            }
+                        });
+                    });
+                }, 100);
+            }
+        }
+
+        function showTab(tabName) {
+            // Update buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active', 'border-brand-vibrant-orange', 'text-brand-vibrant-orange');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            
+            const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
+            activeBtn.classList.add('active', 'border-brand-vibrant-orange', 'text-brand-vibrant-orange');
+            activeBtn.classList.remove('border-transparent', 'text-gray-500');
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+        }
+
+        function printResumen() {
+            const originalContents = document.body.innerHTML;
+            const printContents = `
+                <html>
+                <head>
+                    <title>Resumen de Productos por Sede - Zenksbox</title>
+                    <style>
+                        body { 
+                            font-family: 'Lexend', Arial, sans-serif; 
+                            margin: 0; 
+                            padding: 20px;
+                            background: white;
+                        }
+                        .header {
+                            text-align: center;
+                            margin-bottom: 30px;
+                            border-bottom: 3px solid #FF7420;
+                            padding-bottom: 20px;
+                        }
+                        .header img {
+                            height: 60px;
+                            margin-bottom: 10px;
+                        }
+                        .header h1 {
+                            color: #0E1E1E;
+                            margin: 10px 0;
+                        }
+                        table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 40px;
+                            page-break-inside: avoid;
+                        }
+                        th {
+                            background-color: #0E1E1E;
+                            color: white;
+                            padding: 12px;
+                            text-align: left;
+                            font-weight: bold;
+                        }
+                        td {
+                            padding: 10px;
+                            border-bottom: 1px solid #ddd;
+                        }
+                        tr:nth-child(even) {
+                            background-color: #F6F6F8;
+                        }
+                        .section-title {
+                            background-color: #DBC0F9;
+                            padding: 15px;
+                            margin: 30px 0 10px 0;
+                            border-radius: 8px;
+                            font-weight: bold;
+                            font-size: 18px;
+                            color: #0E1E1E;
+                            page-break-before: always;
+                        }
+                        .section-title:first-of-type {
+                            page-break-before: avoid;
+                        }
+                        .section-subtitle {
+                            font-size: 12px;
+                            color: #666;
+                            margin-top: 5px;
+                        }
+                        .cantidad {
+                            background-color: #FF7420;
+                            color: white;
+                            padding: 5px 15px;
+                            border-radius: 20px;
+                            font-weight: bold;
+                            display: inline-block;
+                            min-width: 40px;
+                            text-align: center;
+                        }
+                        .barcode {
+                            font-family: 'Courier New', monospace;
+                            font-size: 11px;
+                            background: #f0f0f0;
+                            padding: 3px 6px;
+                            border-radius: 3px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <img src="https://brandbook.nimbox360.com/brandbooks/zenksbox/logos/Principal/LogoPrincipal1.png" alt="Zenksbox">
+                        <h1>RESUMEN DE PRODUCTOS POR SEDE</h1>
+                        <p>Fecha: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </div>
+                    ${document.getElementById('resumenContent').innerHTML}
+                </body>
+                </html>
+            `;
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(printContents);
+            printWindow.document.close();
+            
+            printWindow.onload = function() {
+                printWindow.print();
+            };
+        }
+
+        function printPedidos() {
+            window.print();
+        }
+    </script>
+</body>
+</html>
